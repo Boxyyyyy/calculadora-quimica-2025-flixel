@@ -16,6 +16,7 @@ import flixel.tweens.FlxTween;
 import flixel.math.FlxMath;
 import flixel.group.FlxGroup;
 import flixel.group.FlxSpriteGroup;
+import flixel.group.FlxSpriteContainer;
 import flixel.util.FlxColor;
 import flixel.util.FlxSpriteUtil;
 import flixel.math.FlxRect;
@@ -26,12 +27,9 @@ import Util;
 
 class PlayState extends FlxUIState
 {
-	var inputOutline:FlxSprite;
-	var inputInline:FlxSprite;
-
 	var enUnMenu:Bool = false;
 	var curMenu:String = '';
-
+	
 	var arrayIndex:Int = 0;
 
 	var ecuacion_reactante:Array<Array<Dynamic>> = [ // HARDCODED EXAMPLE REACTANT SIDE
@@ -39,12 +37,22 @@ class PlayState extends FlxUIState
 		[['ca', 3], ['p', 2], ['o', 8]],
 	];
 
+	/*
+		[['h', 2], ['s', 1], ['o', 4]],
+		[['ca', 3], ['p', 2], ['o', 8]],
+	*/
+
 	var textosLocos:Array<FlxText> = [];
 
 	var ecuacion_producto:Array<Array<Dynamic>> = [ // HARDCODED EXAMPLE PRODUCT SIDE
 		[['ca', 1], ['s', 1], ['o', 4]],
 		[['h', 3], ['p', 1], ['o', 4]]
 	];
+
+	/*
+		[['ca', 1], ['s', 1], ['o', 4]],
+		[['h', 3], ['p', 1], ['o', 4]]
+	*/
 
 	var ecuacionFinal:Array<Array<Dynamic>> = [];
 
@@ -55,13 +63,12 @@ class PlayState extends FlxUIState
 	var elementosEcuacion:Array<Array<Float>> = [];
 
 	var siEstaBalanceado:Bool = true;
+	var isDraggingScrollBar:Bool = false;
 
 	var reactanteFullString:String = '';
 
 	var texto_ecuacion:FlxText;
 	var texto_ecuacion_tab:FlxText;
-
-	var elementoInput:FlxUIInputText;
 
 	var agregar_sustanciaBtn:FlxSprite;
 	var sustancia_rect:FlxRect;
@@ -70,6 +77,10 @@ class PlayState extends FlxUIState
 	var menuTab:FlxSprite;
 	var reactanteTabButton:FlxSprite;
 	var productoTabButton:FlxSprite;
+	var elCubitoLoco:FlxSprite;
+
+	var ecuacionProductoEquilibrio:FlxText;
+	var ecuacionReactanteEquilibrio:FlxText;
 
 	var scrollBar:FlxSprite;
 	var curScrollPos:Array<Float> = [0, 0]; // REACTANTE - PRODUCTO
@@ -82,104 +93,86 @@ class PlayState extends FlxUIState
 
 	var curSustanciaLo:Int = -1;
 
-	var tabs:Array<FlxSprite> = [];
-
 	var menuReactante:Array<FlxBasic> = [];
 	var menuProducto:Array<FlxBasic> = [];
 
 	var reactanteSpriteGroup:FlxTypedGroup<SustanciaMenu>;
+	var productoSpriteGroup:FlxTypedGroup<SustanciaMenu>;
 
 	var reactanteMoleculas:Map<String, Int> = [];
 	var productoMoleculas:Map<String, Int> = []; 
 
-	var solucionesChiChegnol:Array<Float> = [];
+	var solucionesChiChegnol:Array<Int> = [];
+
+	var editarReactanteBoton:FlxSprite;
+	var editarProductoBoton:FlxSprite;
+	var closeMenu:FlxSprite;
 
 	var cameraLo:FlxCamera = null;
 
 	override public function create()
 	{
 		var cameraInit = new FlxCamera();
+		cameraInit.bgColor = 0xFFFFFFFF;
 		FlxG.cameras.add(cameraInit);
 
 		reactanteSpriteGroup = new FlxTypedGroup<SustanciaMenu>();
+		productoSpriteGroup = new FlxTypedGroup<SustanciaMenu>();
 
-		inputOutline = new FlxSprite().makeGraphic(1, 1, 0xFFFFFFFF);
-		inputOutline.scale.set(FlxG.width - 60, FlxG.height / 5);
-		inputOutline.updateHitbox();
-		inputOutline.setPosition((FlxG.width - inputOutline.width) / 2, 35);
+		var fraccionLinea:FlxSprite = new FlxSprite().makeGraphic(1, 1, 0xFF000000);
+		fraccionLinea.scale.set(250, 5);
+		fraccionLinea.updateHitbox();
+		fraccionLinea.setPosition((FlxG.width - fraccionLinea.width) / 2, (FlxG.height - fraccionLinea.height) / 2);
 
-		inputInline = new FlxSprite().makeGraphic(1, 1, 0xFF000000);
-		inputInline.scale.set(inputOutline.width - 20, inputOutline.height - 20);
-		inputInline.updateHitbox();
-		inputInline.setPosition(inputOutline.x + (inputOutline.width - inputInline.width) / 2, inputOutline.y + (inputOutline.height - inputInline.height) / 2);
+		ecuacionProductoEquilibrio = new FlxText(0, 0, 0, '[C]').setFormat('embed:assets/embed/notosans.ttf', 42, 0xFF000000, CENTER);
+		ecuacionReactanteEquilibrio = new FlxText(0, 0, 0, '[A] * [B]³').setFormat('embed:assets/embed/notosans.ttf', 42, 0xFF000000, CENTER);
 
-		texto_ecuacion = new FlxText(0, 0, 0, '', 28);
+		for (a in [fraccionLinea, ecuacionProductoEquilibrio, ecuacionReactanteEquilibrio])
+			add(a);
 
-		initEcuacion();
-		
-		texto_ecuacion.text = reactanteFullString;
+		var editarProductoBoton_Base:FlxSprite = new FlxSprite().makeGraphic(185, 45, 0x00000000);
+		editarProductoBoton_Base.updateHitbox();
+		editarProductoBoton_Base.setPosition(fraccionLinea.x + ((fraccionLinea.width - editarProductoBoton_Base.width) / 2), fraccionLinea.y - editarProductoBoton_Base.height - 65);
 
-		trace(reactanteFullString);
+		editarProductoBoton = FlxSpriteUtil.drawRoundRect(editarProductoBoton_Base, 0, 0, 185, 45, 15, 15, 0xFFFFFFFF, {
+				thickness: 3.5,
+				color: FlxColor.BLACK
+			});
 
-		agregar_sustanciaBtn = new FlxSprite(5, 200).loadGraphic('embed:assets/embed/agregarSustancia.png');
-		agregar_sustanciaBtn.scale.set(0.75, 0.75);
-		agregar_sustanciaBtn.updateHitbox();
+		var displayEditarProductoText:FlxText = new FlxText(0, 0, editarProductoBoton_Base.width, 'EDITAR PRODUCTO(s)').setFormat('embed:assets/embed/notosans.ttf', 16, 0xFF000000, CENTER);
+		displayEditarProductoText.setPosition(editarProductoBoton_Base.x, editarProductoBoton_Base.y + ((editarProductoBoton_Base.height - displayEditarProductoText.height) / 2));
 
-		texto_ecuacion.setFormat('embed:assets/embed/notosans.ttf', 28, 0xFFFFFFFF, CENTER);
-		texto_ecuacion.size = Math.round(Math.min(28.0, 28.0 * ((inputInline.width - 10) / texto_ecuacion.width)));
-		texto_ecuacion.updateHitbox();
-		texto_ecuacion.setPosition(inputInline.x + (inputInline.width - texto_ecuacion.width) / 2, inputInline.y + (inputInline.height - texto_ecuacion.height) / 2);
-		texto_ecuacion.textField.antiAliasType = ADVANCED;
-		texto_ecuacion.textField.sharpness = 400;
+		for (p in [editarProductoBoton_Base, editarProductoBoton, displayEditarProductoText])
+			add(p);
 
-		myVeryBestForever = new FlxSprite().makeGraphic(1, 1, 0xFF000000);
-		myVeryBestForever.scale.set(FlxG.width, FlxG.height);
-		myVeryBestForever.alpha = 0.00001;
-		myVeryBestForever.updateHitbox();
+		var editarReactanteBoton_Base:FlxSprite = new FlxSprite().makeGraphic(185, 45, 0x00000000);
+		editarReactanteBoton_Base.updateHitbox();
+		editarReactanteBoton_Base.setPosition(fraccionLinea.x + ((fraccionLinea.width - editarReactanteBoton_Base.width) / 2), (fraccionLinea.y + editarReactanteBoton_Base.height) + 25);
 
-		elementoInput = new FlxUIInputText(10, 50, 200, '', 10);
-		elementoInput.setFormat('embed:assets/embed/notosans.ttf', 10, 0xFF000000);
-		elementoInput.textField.antiAliasType = ADVANCED;
-		elementoInput.textField.sharpness = 400;
-		menuAH.push(elementoInput);
+		editarReactanteBoton = FlxSpriteUtil.drawRoundRect(editarReactanteBoton_Base, 0, 0, 185, 45, 15, 15, 0xFFFFFFFF, {
+				thickness: 3.5,
+				color: FlxColor.BLACK
+			});
+
+		var displayEditarReactanteText:FlxText = new FlxText(0, 0, editarReactanteBoton_Base.width, 'EDITAR REACTANTE(s)').setFormat('embed:assets/embed/notosans.ttf', 16, 0xFF000000, CENTER);
+		displayEditarReactanteText.setPosition(editarReactanteBoton_Base.x, editarReactanteBoton_Base.y + ((editarReactanteBoton_Base.height - displayEditarReactanteText.height) / 2));
+
+		for (r in [editarReactanteBoton_Base, editarReactanteBoton, displayEditarReactanteText])
+			add(r);
+
+		var closeMenu_base:FlxSprite = new FlxSprite().makeGraphic(50, 50, 0x00000000);
+		closeMenu_base.updateHitbox();
+
+		texto_ecuacion = new FlxText(0, 0, 0, '(Ecuación Química)', 28);
 
 		menuTab = new FlxSprite().loadGraphic('embed:assets/embed/tabb.png');
 		menuTab.scale.set(0.75, 0.75);
 		menuTab.updateHitbox();
 		menuTab.screenCenter();
+		menuReactante.push(menuTab);
+		menuProducto.push(menuTab);
 
-		reactanteTabButton = new FlxSprite().loadGraphic('embed:assets/embed/tabLol.png');
-		reactanteTabButton.scale.set(0.75, 0.75);
-		reactanteTabButton.updateHitbox();
-		reactanteTabButton.setPosition(menuTab.x, menuTab.y - reactanteTabButton.height + 7);
-		reactanteTabButton.ID = 0;
-		menuAH.push(reactanteTabButton);
-		tabs.push(reactanteTabButton);
-
-		productoTabButton = new FlxSprite().loadGraphic('embed:assets/embed/tabLol.png');
-		productoTabButton.scale.set(0.75, 0.75);
-		productoTabButton.updateHitbox();
-		productoTabButton.setPosition((menuTab.x + menuTab.width) - productoTabButton.width, reactanteTabButton.y);
-		productoTabButton.ID = 1;
-		menuAH.push(productoTabButton);
-		tabs.push(productoTabButton);
-
-		var textoReactanteTab:FlxText = new FlxText(reactanteTabButton.x - 1, reactanteTabButton.y - 4, reactanteTabButton.width, 'REACTANTE');
-		textoReactanteTab.setFormat('embed:assets/embed/notosansthin.ttf', 28, 0xFF000000, CENTER);
-		textoReactanteTab.updateHitbox();
-		menuAH.push(textoReactanteTab);
-
-		var textoProductoTab:FlxText = new FlxText(productoTabButton.x - 1, productoTabButton.y - 4, productoTabButton.width, 'PRODUCTO');
-		textoProductoTab.setFormat('embed:assets/embed/notosansthin.ttf', 28, 0xFF000000, CENTER);
-		textoProductoTab.updateHitbox();
-		menuAH.push(textoProductoTab);
-
-		var tituloTabReactante:FlxText = new FlxText(186, 91, 0, 'Ecuación Reactante:', 28);
-		tituloTabReactante.setFormat('embed:assets/embed/notosans.ttf', 28, 0xFF000000, CENTER);
-		tituloTabReactante.updateHitbox();
-		menuReactante.push(tituloTabReactante);
-
-		var elCubitoLoco:FlxSprite = new FlxSprite().makeGraphic(1, 1, 0xFFB7B7B7);
+		elCubitoLoco = new FlxSprite().makeGraphic(1, 1, 0xFFB7B7B7);
 		elCubitoLoco.scale.set(menuTab.width - 80, 175);
 		elCubitoLoco.updateHitbox();
 		elCubitoLoco.setPosition((FlxG.width - elCubitoLoco.width) / 2, ((menuTab.height - elCubitoLoco.height) / 2) + 120);
@@ -189,18 +182,58 @@ class PlayState extends FlxUIState
 		cameraLo = new FlxCamera(Math.round(elCubitoLoco.x), Math.round(elCubitoLoco.y), Math.round(elCubitoLoco.width), Math.round(elCubitoLoco.height) - 1);
 		cameraLo.bgColor.alpha = 0;
 		FlxG.cameras.add(cameraLo, false);
-
-		for (i in 0...ecuacion_reactante.length) {
-			var reactante_sustancia:SustanciaMenu = new SustanciaMenu(0, 0 + (70 * i), Math.round(elCubitoLoco.width - 20), ecuacion_reactante[i], i, 0, cameraLo);
-			reactanteSpriteGroup.add(reactante_sustancia);
-			reactante_sustancia.ID = i;
-
-			trace(i);
-		}
+		cameraLo.visible = false;
 
 		reactanteSpriteGroup.cameras = [cameraLo];
+		productoSpriteGroup.cameras = [cameraLo];
 
 		menuReactante.push(reactanteSpriteGroup);
+		menuProducto.push(productoSpriteGroup);
+
+		initEcuacion();
+		
+		texto_ecuacion.text += '\n$reactanteFullString';
+
+		agregar_sustanciaBtn = new FlxSprite(-905, 200).loadGraphic('embed:assets/embed/agregarSustancia.png');
+		agregar_sustanciaBtn.scale.set(0.75, 0.75);
+		agregar_sustanciaBtn.updateHitbox();
+	
+		ecuacionReactanteEquilibrio.size = Math.round(Math.min(42.0, 42.0 * ((fraccionLinea.width - 10) / ecuacionReactanteEquilibrio.width)));
+		ecuacionReactanteEquilibrio.updateHitbox();
+		ecuacionReactanteEquilibrio.setPosition(fraccionLinea.x + ((fraccionLinea.width - ecuacionReactanteEquilibrio.width) / 2), (fraccionLinea.y + fraccionLinea.height) + 2.5);
+
+		ecuacionProductoEquilibrio.size = Math.round(Math.min(42.0, 42.0 * ((fraccionLinea.width - 10) / ecuacionProductoEquilibrio.width)));
+		ecuacionProductoEquilibrio.updateHitbox();
+		ecuacionProductoEquilibrio.setPosition(fraccionLinea.x + ((fraccionLinea.width - ecuacionProductoEquilibrio.width) / 2), fraccionLinea.y - ecuacionProductoEquilibrio.height - 2.5);
+
+		texto_ecuacion.setFormat('embed:assets/embed/notosans.ttf', 18, 0xFF7C7C7C, CENTER);
+		texto_ecuacion.updateHitbox();
+		texto_ecuacion.setPosition((FlxG.width - texto_ecuacion.width) / 2, 0 + texto_ecuacion.height - 10);
+		texto_ecuacion.textField.antiAliasType = ADVANCED;
+		texto_ecuacion.textField.sharpness = 400;
+
+		myVeryBestForever = new FlxSprite().makeGraphic(1, 1, 0xFF000000);
+		myVeryBestForever.scale.set(FlxG.width * 2, FlxG.height * 2);
+		myVeryBestForever.alpha = 0.00001;
+		myVeryBestForever.updateHitbox();
+
+		closeMenu_base.setPosition((menuTab.x + menuTab.width) - (closeMenu_base.width + 10), menuTab.y + 10);
+
+		closeMenu = FlxSpriteUtil.drawRoundRect(closeMenu_base, 0, 0, 50, 50, 15, 15 , 0xFFFFFFFF, {
+				thickness: 1.25,
+				color: FlxColor.BLACK
+			});
+
+		closeMenu.color = 0xFFFF5B5B;
+
+		var displayCloseMenuText:FlxText = new FlxText(0, 0, closeMenu_base.width, 'X').setFormat('embed:assets/embed/notosans.ttf', 36, 0xFF000000, CENTER);
+		displayCloseMenuText.setPosition(closeMenu_base.x, closeMenu_base.y + ((closeMenu_base.height - displayCloseMenuText.height) / 2));
+		displayCloseMenuText.bold = true;
+
+		var tituloTabReactante:FlxText = new FlxText(186, 91, 0, 'Ecuación Reactante:', 28);
+		tituloTabReactante.setFormat('embed:assets/embed/notosans.ttf', 28, 0xFF000000, CENTER);
+		tituloTabReactante.updateHitbox();
+		menuReactante.push(tituloTabReactante);
 
 		var scrollingBarSpace:FlxSprite = new FlxSprite().makeGraphic(1, 1, 0xFF5B5B5B);
 		scrollingBarSpace.scale.set(3, elCubitoLoco.height);
@@ -235,7 +268,7 @@ class PlayState extends FlxUIState
 
 		menuAH.push(menuTab);
 
-		for (i in [inputOutline, inputInline, texto_ecuacion, agregar_sustanciaBtn, myVeryBestForever])
+		for (i in [texto_ecuacion, myVeryBestForever])
 			add(i);
 
 		for (a in menuAH) {
@@ -252,6 +285,54 @@ class PlayState extends FlxUIState
 			dx.visible = false;
 			add(dx);
 		}
+
+		for (c in [closeMenu_base, closeMenu, displayCloseMenuText]) {
+			c.visible = false;
+			menuProducto.push(c);
+			menuReactante.push(c);
+			add(c);
+		}
+
+		myVeryBestForever.alpha = 0.65;
+
+		var elementTiles:FlxTypedGroup<ElementTile>;
+
+		var epicAmazing:FlxSprite = new FlxSprite().loadGraphic('embed:assets/embed/tabb.png');
+		epicAmazing.scale.set(0.85, 0.875);
+		epicAmazing.updateHitbox();
+		epicAmazing.setPosition((FlxG.width - epicAmazing.width) / 2, ((FlxG.height - epicAmazing.height) / 2) + 8);
+		add(epicAmazing);
+
+		elementTiles = new FlxTypedGroup<ElementTile>();
+        add(elementTiles);
+
+        var TILE_WIDTH:Float = 22;
+        var TILE_HEIGHT:Float = 22;
+        var TILE_SPACING:Float = 4;
+
+		@:privateAccess {
+			for (row in 0...Util.elementsLayout.length)
+			{
+				for (col in 0...Util.elementsLayout[row].length)
+				{
+					var elementSymbol = Util.elementsLayout[row][col];
+					if (elementSymbol != null && elementSymbol.indexOf("-") == -1) // Ignore nulls and range placeholders
+					{
+						var tileX = 75 + ((TILE_WIDTH + TILE_SPACING) * col);
+						// Adjust position for Lanthanides and Actinides to be separate
+						var tileY = 180 + ((row >= 8) 
+							? (TILE_HEIGHT + TILE_SPACING) * (row - 2 + 1.5) // Position them below the main table with a gap
+							: (TILE_HEIGHT + TILE_SPACING) * row);
+
+						var tile = new ElementTile(tileX, tileY, TILE_WIDTH, TILE_HEIGHT, elementSymbol);
+						elementTiles.add(tile);
+					}
+				}
+			}
+		}
+
+		curMenu = 'H3PO4 REACTANTE PERIODIC';
+		enUnMenu = true;
 	
 		super.create();
 	}
@@ -259,86 +340,111 @@ class PlayState extends FlxUIState
 	override public function update(elapsed:Float)
 	{
 		super.update(elapsed);
-
-		// + OPENS EQUATION MENU
-
-		if (agregar_sustanciaBtn != null && !enUnMenu && FlxG.mouse.overlaps(agregar_sustanciaBtn) && curMenu != 'main') {
-			agregar_sustanciaBtn.color = 0xFFC6C6C6;
-			agregar_sustanciaBtn.scale.set(0.725, 0.725);
+		
+		if (editarProductoBoton != null && !enUnMenu && FlxG.mouse.overlaps(editarProductoBoton) && curMenu != 'producto') {
+			editarProductoBoton.color = 0xFFC6C6C6;
+			editarProductoBoton.scale.set(0.975, 0.975);
 
 			if (FlxG.mouse.justPressed) {
+				curTab = 1;
 				enUnMenu = true;
-				curMenu = 'main';
+				editarProductoBoton.color = 0xFFA3A3A3;
+				curMenu = 'producto';
 				myVeryBestForever.alpha = 0.65;
+				cameraLo.visible = true;
 
-				for (a in menuAH)
+				texto_ecuacion_tab.text = cargar_string_ecuacion(curTab);
+				texto_ecuacion_tab.size = Math.round(Math.min(36.0, 36.0 * ((menuTab.width - 20) / texto_ecuacion_tab.width)));
+				texto_ecuacion_tab.screenCenter(X);
+
+				for (a in menuProducto)
 					a.visible = true;
 
-				FlxTween.color(agregar_sustanciaBtn, 0.25, agregar_sustanciaBtn.color, 0xFFFFFFFF, {ease: FlxEase.quadOut});
-				FlxTween.tween(agregar_sustanciaBtn.scale, {x: 0.75, y: 0.75}, 0.25, {ease: FlxEase.quadOut});
+				FlxTween.color(editarProductoBoton, 0.25, editarProductoBoton.color, 0xFFFFFFFF, {ease: FlxEase.quadOut});
+				FlxTween.tween(editarProductoBoton.scale, {x: 1, y: 1}, 0.25, {ease: FlxEase.quadOut});
 			}
 		} else {
 			if (!enUnMenu) {
-				agregar_sustanciaBtn.color = 0xFFFFFFFF;
-				agregar_sustanciaBtn.scale.set(0.75, 0.75);
+				editarProductoBoton.color = 0xFFFFFFFF;
+				editarProductoBoton.scale.set(1, 1);
 			}
 		}
 
-		for (boton in tabs) {
-			if (boton != null) {
-				if (enUnMenu && FlxG.mouse.overlaps(boton) && ((curMenu != '' && curMenu != 'menuElemento'))) {
+		if (editarReactanteBoton != null && !enUnMenu && FlxG.mouse.overlaps(editarReactanteBoton) && curMenu != 'reactante') {
+			editarReactanteBoton.color = 0xFFC6C6C6;
+			editarReactanteBoton.scale.set(0.975, 0.975);
 
-					if (boton.ID != curTab && curTab != -1)
-						boton.color = 0xFF7F7F7F;
-					else if (boton.ID != curTab && curTab == -1)
-						boton.color = 0xFFC1C1C1;
-	
-					if (FlxG.mouse.justPressed && boton.ID != curTab) {
-						curTab = boton.ID;
-						boton.color = 0xFFFFFFFF;
+			if (FlxG.mouse.justPressed) {
+				curTab = 0;
+				enUnMenu = true;
+				editarReactanteBoton.color = 0xFFA3A3A3;
+				curMenu = 'reactante';
+				myVeryBestForever.alpha = 0.65;
+				cameraLo.visible = true;
 
-						texto_ecuacion_tab.text = cargar_string_ecuacion(curTab);
-						texto_ecuacion_tab.screenCenter(X);
-						texto_ecuacion_tab.size = Math.round(Math.min(36.0, 36.0 * ((menuTab.width - 20) / texto_ecuacion_tab.width)));
-	
-						for (s in menuProducto)
-							s.visible = (curTab == 0 ? false : true);
-	
+				texto_ecuacion_tab.text = cargar_string_ecuacion(curTab);
+				texto_ecuacion_tab.size = Math.round(Math.min(36.0, 36.0 * ((menuTab.width - 20) / texto_ecuacion_tab.width)));
+				texto_ecuacion_tab.screenCenter(X);
+
+				for (a in menuReactante)
+					a.visible = true;
+
+				FlxTween.color(editarReactanteBoton, 0.25, editarReactanteBoton.color, 0xFFFFFFFF, {ease: FlxEase.quadOut});
+				FlxTween.tween(editarReactanteBoton.scale, {x: 1, y: 1}, 0.25, {ease: FlxEase.quadOut});
+			}
+		} else {
+			if (!enUnMenu) {
+				editarReactanteBoton.color = 0xFFFFFFFF;
+				editarReactanteBoton.scale.set(1, 1);
+			}
+		}
+
+		if (closeMenu != null && enUnMenu && FlxG.mouse.overlaps(closeMenu) && curMenu != '') {
+			closeMenu.color = 0xFFD64D4D;
+			closeMenu.scale.set(0.975, 0.975);
+
+			if (FlxG.mouse.justPressed) {
+				curTab = -1;
+				enUnMenu = false;
+				closeMenu.color = 0xFFFF5B5B;
+				closeMenu.scale.set(1, 1);
+				myVeryBestForever.alpha = 0.0001;
+				cameraLo.visible = false;
+
+				switch (curMenu) {
+					case 'reactante' | 'producto':
 						for (a in menuReactante)
-							a.visible = (curTab == 0 ? true : false);
+							a.visible = false;
 
-						curMenu = (curTab == 0 ? 'reactante' : 'producto');
-
-						for (i in menuReactante) {
-							if (menuProducto.contains(i))
-								i.visible = true;
-						}
-					}
-				} else {
-					if (enUnMenu) {
-						if (boton.ID != curTab && curTab != -1)
-							boton.color = 0xFFB2B2B2;
-						else if (boton.ID != curTab && curTab == -1)
-							boton.color = 0xFFFFFFFF;
-					}
+						for (a in menuProducto)
+							a.visible = false;
 				}
+
+				curMenu = '';
+			}
+		} else {
+			if (enUnMenu) {
+				closeMenu.color = 0xFFFF5B5B;
+				closeMenu.scale.set(1, 1);
 			}
 		}
+
+		// MENU REACTANTE/PRODUCTO
 
 		if (reactanteSpriteGroup.members.length > 0) {
 			for (elemeneneenenenenenenene in reactanteSpriteGroup.members) {
-				if (elemeneneenenenenenenene.editarBoton != null) {
-					if (FlxG.mouse.overlaps(elemeneneenenenenenenene.editarBoton, (cameraLo != null ? cameraLo : null)) && curSustanciaLo != elemeneneenenenenenenene.ID) {
+				if (elemeneneenenenenenenene.base_editarBoton != null && curMenu == 'reactante') {
+					if (FlxG.mouse.overlaps(elemeneneenenenenenenene.base_editarBoton, (cameraLo != null ? cameraLo : null)) && curSustanciaLo != elemeneneenenenenenenene.ID)
 						curSustanciaLo = elemeneneenenenenenenene.ID;
+					else if (FlxG.mouse.overlaps(elemeneneenenenenenenene.base_editarBoton, (cameraLo != null ? cameraLo : null)) && curSustanciaLo == elemeneneenenenenenenene.ID) {
+						reactanteSpriteGroup.members[curSustanciaLo].changeEditButtonColor(0xFF9B9B9B);
 
-						if (curSustanciaLo == elemeneneenenenenenenene.ID) {
-							reactanteSpriteGroup.members[curSustanciaLo].changeEditButtonColor(0xFF9B9B9B);
-
-							if (FlxG.mouse.justPressed) {
-								reactanteSpriteGroup.members[curSustanciaLo].changeEditButtonColor(0xFF686868);
-							}
+						if (FlxG.mouse.justPressed) {
+							trace('oaa');
+							reactanteSpriteGroup.members[curSustanciaLo].changeEditButtonColor(0xFF686868);
 						}
-					} else if (!FlxG.mouse.overlaps(reactanteSpriteGroup.members[elemeneneenenenenenenene.ID].editarBoton, (cameraLo != null ? cameraLo : null)) && curSustanciaLo == elemeneneenenenenenenene.ID) {
+					}
+					else if (!FlxG.mouse.overlaps(reactanteSpriteGroup.members[elemeneneenenenenenenene.ID].base_editarBoton, (cameraLo != null ? cameraLo : null)) && curSustanciaLo == elemeneneenenenenenenene.ID) {
 						reactanteSpriteGroup.members[elemeneneenenenenenenene.ID].changeEditButtonColor();
 						curSustanciaLo = -1;
 					}
@@ -346,24 +452,63 @@ class PlayState extends FlxUIState
 			}
 		}
 
-		trace(curSustanciaLo);
+		if (productoSpriteGroup.members.length > 0) {
+			for (elemeneneenenenenenenene in productoSpriteGroup.members) {
+				if (elemeneneenenenenenenene.base_editarBoton != null && curMenu == 'producto') {
+					if (FlxG.mouse.overlaps(elemeneneenenenenenenene.base_editarBoton, (cameraLo != null ? cameraLo : null)) && curSustanciaLo != elemeneneenenenenenenene.ID)
+						curSustanciaLo = elemeneneenenenenenenene.ID;
+					else if (FlxG.mouse.overlaps(elemeneneenenenenenenene.base_editarBoton, (cameraLo != null ? cameraLo : null)) && curSustanciaLo == elemeneneenenenenenenene.ID) {
+						productoSpriteGroup.members[curSustanciaLo].changeEditButtonColor(0xFF9B9B9B);
 
-		if (FlxG.keys.justPressed.SPACE) {
-			for (texto in textosLocos)
-				texto.visible = true;
-		} else if (FlxG.keys.justPressed.T) {
-			for (texto in textosLocos)
-				texto.visible = false;
+						if (FlxG.mouse.justPressed) {
+							trace('oaaadas');
+							productoSpriteGroup.members[curSustanciaLo].changeEditButtonColor(0xFF686868);
+						}
+					}
+					else if (!FlxG.mouse.overlaps(productoSpriteGroup.members[elemeneneenenenenenenene.ID].base_editarBoton, (cameraLo != null ? cameraLo : null)) && curSustanciaLo == elemeneneenenenenenenene.ID) {
+						productoSpriteGroup.members[elemeneneenenenenenenene.ID].changeEditButtonColor();
+						curSustanciaLo = -1;
+					}
+				}
+			}
 		}
-		
-		if (FlxG.keys.justPressed.B)
-			balancear();
 
-		if (FlxG.keys.justPressed.M && cameraLo?.scroll.y > 0)
-			cameraLo.scroll.y -= 5;
+		// SCROLL BAR
 
-		if (FlxG.keys.justPressed.N)
-			cameraLo.scroll.y += 5;
+		if (curMenu == 'reactante' || curMenu == 'producto')
+		{
+			var maxScrollY:Float = Math.max(0, elCubitoLoco.height);
+
+			var scrollTrackHeight:Float = elCubitoLoco.height;
+			var scrollHandleHeight:Float = scrollBar.height;
+			var maxHandleY:Float = elCubitoLoco.y + scrollTrackHeight - scrollHandleHeight;
+
+			if (!isDraggingScrollBar && FlxG.mouse.justPressed && FlxG.mouse.overlaps(scrollBar))
+				isDraggingScrollBar = true;
+
+			if (isDraggingScrollBar && FlxG.mouse.justReleased)
+				isDraggingScrollBar = false;
+
+			if (isDraggingScrollBar)
+				scrollBar.y += FlxG.mouse.deltaY;
+
+			if (FlxG.mouse.wheel != 0 && maxHandleY <= maxScrollY)
+				cameraLo.scroll.y -= FlxG.mouse.wheel / 10;
+
+			scrollBar.y = FlxMath.bound(scrollBar.y, elCubitoLoco.y, maxHandleY);
+
+			if (isDraggingScrollBar) {
+				var scrollPercent:Float = (scrollBar.y - elCubitoLoco.y) / (scrollTrackHeight - scrollHandleHeight);
+				if (Math.isNaN(scrollPercent)) scrollPercent = 0;
+				cameraLo.scroll.y = scrollPercent * maxScrollY;
+			} else {
+				cameraLo.scroll.y = FlxMath.bound(cameraLo.scroll.y, 0, maxScrollY);
+
+				var cameraPercent:Float = cameraLo.scroll.y / maxScrollY;
+				if (Math.isNaN(cameraPercent)) cameraPercent = 0;
+				scrollBar.y = elCubitoLoco.y + (cameraPercent * (scrollTrackHeight - scrollHandleHeight));
+			}
+		}
 	}
 
 	function balancear():Void
@@ -518,10 +663,10 @@ class PlayState extends FlxUIState
 					r--;
     			}
 
-				solucionesChiChegnol = soluciones;
+				solucionesChiChegnol = Util.normalizarSolucionesAEnteros(soluciones);
 
 				trace('Las soluciones sin amplificar son: ${soluciones}');
-				trace('Soluciones: ${Util.normalizarSolucionesAEnteros(soluciones)}');
+				trace('Soluciones: ${solucionesChiChegnol}');
 
 				trace(matrizAumentada);
 
@@ -530,9 +675,105 @@ class PlayState extends FlxUIState
 		}
 	}
 
+	/*
 	override function getEvent(id:String, sender:Dynamic, data:Dynamic, ?params:Array<Dynamic>) {
 		if(id == FlxUIInputText.CHANGE_EVENT && (sender is FlxUIInputText) && sender == elementoInput) {
 			trace(elementoInput.text);
+		}
+	}*/
+
+	function initEquilibriumEcuacion():Void
+	{
+		ecuacionReactanteEquilibrio.text = '';
+		ecuacionProductoEquilibrio.text = '';
+		arrayIndex = 0;
+
+		var nones:Array<Bool> = [false, false];
+
+		if (ecuacion_reactante.length <= 0)
+			ecuacionReactanteEquilibrio.text = 'LA ECUACIÓN NECESITA REACTANTES';
+
+		if (ecuacion_producto.length <= 0)
+			ecuacionProductoEquilibrio.text = 'LA ECUACIÓN NECESITA PRODUCTOS';
+
+		@:privateAccess {
+			if (ecuacion_reactante.length > 0) {
+				for (s in 0...ecuacion_reactante.length) {
+					if (ecuacion_reactante[s][0] != null) {
+						if (Type.getClass(ecuacion_reactante[s][0]) == Array) {
+							var sustanciaEpica:Array<Dynamic> = ecuacion_reactante[s];
+
+							var ecuacionLocaString:String = '[';
+						
+							for (p in 0...sustanciaEpica.length)
+								ecuacionLocaString += '${Util.tabla_periodica.get(sustanciaEpica[p][0])[0]}${Util.convertToSubscript(sustanciaEpica[p][1])}';
+
+							ecuacionLocaString += ']${Util.convertToExpo(solucionesChiChegnol[s])}';
+
+							ecuacionReactanteEquilibrio.text += ecuacionLocaString;
+						} else
+							ecuacionReactanteEquilibrio.text += '[${Util.tabla_periodica.get(ecuacion_reactante[s][0])[0]}${Util.convertToSubscript(ecuacion_reactante[s][1])}]${Util.convertToExpo(solucionesChiChegnol[s])}';
+					}
+
+					if (ecuacion_reactante[arrayIndex + 1] != null) ecuacionReactanteEquilibrio.text += ' • ';
+					else break;
+
+					arrayIndex += 1;
+				}
+			}
+
+			arrayIndex = 0;
+
+			if (ecuacion_producto.length > 0) {
+				for (s in 0...ecuacion_producto.length) {
+					if (ecuacion_producto[s][0] != null) {
+						if (Type.getClass(ecuacion_producto[s][0]) == Array) {
+							var sustanciaEpica:Array<Dynamic> = ecuacion_producto[s];
+
+							var ecuacionLocaString:String = '[';
+						
+							for (p in 0...sustanciaEpica.length)
+								ecuacionLocaString += '${Util.tabla_periodica.get(sustanciaEpica[p][0])[0]}${Util.convertToSubscript(sustanciaEpica[p][1])}';
+
+							ecuacionLocaString += ']${Util.convertToExpo(solucionesChiChegnol[s + ecuacion_reactante.length])}';
+
+							ecuacionProductoEquilibrio.text += ecuacionLocaString;
+						} else
+							ecuacionProductoEquilibrio.text += '[${Util.tabla_periodica.get(ecuacion_producto[s][0])[0]}${Util.convertToSubscript(ecuacion_producto[s][1])}]${Util.convertToExpo(solucionesChiChegnol[s + ecuacion_reactante.length])}';
+					}
+
+					if (ecuacion_producto[arrayIndex + 1] != null) ecuacionProductoEquilibrio.text += ' • ';
+					else break;
+
+					arrayIndex += 1;
+				}
+			}
+
+			arrayIndex = 0;
+		}
+	}
+
+	function reloadEcuacionSustanciaMenu(menuMimic:FlxSprite=null, cam:FlxCamera=null):Void
+	{
+		var widthLol:Float = (menuMimic != null ? menuMimic.width : 0);
+
+		reactanteSpriteGroup.clear();
+		productoSpriteGroup.clear();
+
+		for (i in 0...ecuacion_reactante.length) {
+			var reactante_sustancia:SustanciaMenu = new SustanciaMenu(0, 0 + (70 * i), Math.round(elCubitoLoco.width - 20), ecuacion_reactante[i], i, 0, cam);
+			reactanteSpriteGroup.add(reactante_sustancia);
+			reactante_sustancia.ID = i;
+
+			trace(i);
+		}
+
+		for (i in 0...ecuacion_producto.length) {
+			var producto_sustancia:SustanciaMenu = new SustanciaMenu(0, 0 + (70 * i), Math.round(elCubitoLoco.width - 20), ecuacion_producto[i], i, 1, cam);
+			productoSpriteGroup.add(producto_sustancia);
+			producto_sustancia.ID = i;
+
+			trace(i);
 		}
 	}
 
@@ -544,16 +785,11 @@ class PlayState extends FlxUIState
 		reactanteMoleculas.clear();
 		productoMoleculas.clear();
 
-		for (texto in textosLocos)
+		/*for (texto in textosLocos)
 			FlxDestroyUtil.destroy(texto);
 		
-		textosLocos = [];
+		textosLocos = [];*/
 		elementos_presentes = [];
-
-		if (ecuacion_reactante.length <= 0) { // + IF THE REACTANT/PRODUCT
-			reactanteFullString = '¡Porfavor introducir una ecuación de reactante!';
-			return;
-		}
 
 		@:privateAccess {
 			if (ecuacion_reactante.length > 0) {
@@ -564,22 +800,14 @@ class PlayState extends FlxUIState
 
 						if (Type.getClass(sustanciaLol[0]) == Array) {
 							var sustanciaEpica:Array<Dynamic> = sustanciaLol;
-						
-							for (ele in sustanciaEpica) {
-								reactanteFullString += '${Util.tabla_periodica.get(ele[0])[0]}${Util.convertToSubscript(ele[1])}';	
+
+							for (ele in sustanciaEpica)
 								setMoleculas(ele[0], ele[1], 0);
-							}
-						} else {
-							reactanteFullString += '${Util.tabla_periodica.get(sustanciaLol[0])[0]}${Util.convertToSubscript(sustanciaLol[1])}';
+						} else
 							setMoleculas(sustanciaLol[0], sustanciaLol[1], 0);
-						}
 					}
 
-					if (ecuacion_reactante[arrayIndex + 1] != null) reactanteFullString += ' + ';
-					else {
-						reactanteFullString += ' -> ';
-						break;
-					}
+					if (ecuacion_reactante[arrayIndex + 1] == null) break;
 
 					arrayIndex += 1;
 				}
@@ -596,24 +824,28 @@ class PlayState extends FlxUIState
 						if (Type.getClass(sustanciaLol[0]) == Array) {
 							var sustanciaEpica:Array<Dynamic> = sustanciaLol;
 						
-							for (ele in sustanciaEpica) {
-								reactanteFullString += '${Util.tabla_periodica.get(ele[0])[0]}${Util.convertToSubscript(ele[1])}';	
+							for (ele in sustanciaEpica)
 								setMoleculas(ele[0], ele[1], 1);
-							}
-						} else {
-							reactanteFullString += '${Util.tabla_periodica.get(sustanciaLol[0])[0]}${Util.convertToSubscript(sustanciaLol[1])}';
+						} else
 							setMoleculas(sustanciaLol[0], sustanciaLol[1], 1);
-						}
 					}
-						
-					if (ecuacion_producto[arrayIndex + 1] != null) reactanteFullString += ' + ';
-					else break;
+
+					if (ecuacion_producto[arrayIndex + 1] == null) break;
 
 					arrayIndex += 1;
 				}
 			}
 
-			var okLol:FlxText = new FlxText(texto_ecuacion.x, inputOutline.y + inputOutline.height + 25, '-- MOLÉCULAS REACTANTE --');
+			balancear();
+			construirEcuacionString();
+			initEquilibriumEcuacion();
+			
+			if (elCubitoLoco != null && cameraLo != null)
+				reloadEcuacionSustanciaMenu(elCubitoLoco, cameraLo);
+
+			trace(reactanteFullString);
+
+			/*var okLol:FlxText = new FlxText(texto_ecuacion.x, inputOutline.y + inputOutline.height + 25, '-- MOLÉCULAS REACTANTE --');
 			okLol.setFormat('embed:assets/embed/notosans.ttf', 14, 0xFFFFFFFF, FlxTextAlign.CENTER);
 			okLol.updateHitbox();
 			okLol.screenCenter(X);
@@ -621,7 +853,7 @@ class PlayState extends FlxUIState
 
 			// Para los reactantes
 
-			for (i in 0...elementos_presentes.length) {
+			/*for (i in 0...elementos_presentes.length) {
 				var textitoLoco:FlxText = new FlxText(okLol.x, okLol.y + ((okLol.height + 10) * (i + 1)), '${Util.tabla_periodica.get(elementos_presentes[i])[1]}: ${reactanteMoleculas.get(elementos_presentes[i])}'); 
 				textitoLoco.setFormat('embed:assets/embed/notosans.ttf', 14, 0xFFFFFFFF, FlxTextAlign.CENTER);
 				textitoLoco.updateHitbox();
@@ -644,11 +876,67 @@ class PlayState extends FlxUIState
 				add(textitoLoco);
 			}
 
+			for (texto in textosLocos)
+				texto.visible = false;*/
+
 			trace(reactanteMoleculas);
 			trace(productoMoleculas);
+		}
+	}
 
-			for (texto in textosLocos)
-				texto.visible = false;
+	function construirEcuacionString():Void
+	{
+		arrayIndex = 0;
+
+		if (ecuacion_reactante.length <= 0) { // + IF THE REACTANT/PRODUCT
+			reactanteFullString = '¡Porfavor introducir una ecuación de reactante!';
+			return;
+		}
+		
+		@:privateAccess {
+			if (ecuacion_reactante.length > 0) {
+				for (s in 0...ecuacion_reactante.length) {
+					if (ecuacion_reactante[s][0] != null) {
+						if (Type.getClass(ecuacion_reactante[s][0]) == Array) {
+							var sustanciaEpica:Array<Dynamic> = ecuacion_reactante[s];
+
+							for (p in 0...sustanciaEpica.length)
+								reactanteFullString += '${(p == 0 ? (solucionesChiChegnol[s] == 1 ? '' : Std.string(solucionesChiChegnol[s])) : '')}${Util.tabla_periodica.get(sustanciaEpica[p][0])[0]}${Util.convertToSubscript(sustanciaEpica[p][1])}';
+						} else
+							reactanteFullString += '${(solucionesChiChegnol[s] == 1 ? '' : Std.string(solucionesChiChegnol[s]))}${Util.tabla_periodica.get(ecuacion_reactante[s][0])[0]}${Util.convertToSubscript(ecuacion_reactante[s][1])}';
+					}
+
+					if (ecuacion_reactante[arrayIndex + 1] != null) reactanteFullString += ' + ';
+					else {
+						reactanteFullString += ' -> ';
+						break;
+					} 
+
+					arrayIndex += 1;
+				}
+			}
+
+			arrayIndex = 0;
+
+			if (ecuacion_producto.length > 0) {
+				for (s in 0...ecuacion_producto.length) {
+					if (ecuacion_producto[s][0] != null) {
+						if (Type.getClass(ecuacion_producto[s][0]) == Array) {
+							var sustanciaEpica:Array<Dynamic> = ecuacion_producto[s];
+						
+							for (p in 0...sustanciaEpica.length)
+								reactanteFullString += '${(p == 0 ? (solucionesChiChegnol[s + ecuacion_reactante.length] == 1 ? '' : Std.string(solucionesChiChegnol[s + ecuacion_reactante.length])) : '')}${Util.tabla_periodica.get(sustanciaEpica[p][0])[0]}${Util.convertToSubscript(sustanciaEpica[p][1])}';
+						} else
+							reactanteFullString += '${(solucionesChiChegnol[s + ecuacion_reactante.length] == 1 ? '' : Std.string(solucionesChiChegnol[s + ecuacion_reactante.length]))}${Util.tabla_periodica.get(ecuacion_producto[s][0])[0]}${Util.convertToSubscript(ecuacion_producto[s][1])}';
+					}
+
+					
+					if (ecuacion_producto[arrayIndex + 1] != null) reactanteFullString += ' + ';
+					else break;
+
+					arrayIndex += 1;
+				}
+			}
 		}
 	}
 
@@ -722,12 +1010,15 @@ class SustanciaMenu extends FlxSpriteGroup
 	var mm_display:FlxText;
 	var mm:FlxText;
 	var mm_gmol:FlxText;
-	public var editarBoton:FlxSprite;
+	public var base_editarBoton:FlxSprite;
+	var editarLocos:FlxSprite;
 	var intCam:FlxCamera = null;
+
+	var intPosLol:Array<Float> = [0, 0];
 
 	// var parent:FlxSprite;
 
-	public static var SUSTANCIA_ID:String = '';
+	public var SUSTANCIA_ID:String = '';
 
 	var eso_si_que_no_me_lo_esperaba:Float = 0;
 
@@ -739,6 +1030,8 @@ class SustanciaMenu extends FlxSpriteGroup
 		this.parent = parent;
 
 		trace(parent);*/
+
+		intPosLol = [x, y];
 
 		if (zaCam!=null)
 			intCam = zaCam;
@@ -811,13 +1104,18 @@ class SustanciaMenu extends FlxSpriteGroup
 
 		mm_gmol = new FlxText(137.5, 17 + mm.height, 0, '(g/mol)').setFormat('embed:assets/embed/notosans.ttf', 16, 0xFF000000, CENTER);
 
-		editarBoton = new FlxSprite(235, 10).makeGraphic(100, 50, 0x00000000);
+		base_editarBoton = new FlxSprite(235, 10 - intPosLol[1]).makeGraphic(100, 50, 0x00000000);
+
+		this.editarLocos = FlxSpriteUtil.drawRoundRect(this.base_editarBoton, 0, 0, 100, 50, 15, 15, 0xFFFFFFFF, {
+				thickness: 3.5,
+				color: FlxColor.BLACK
+			});
 
 		changeEditButtonColor();
 
 		var editarText:FlxText = new FlxText(233.5, 17.5, 100, 'EDITAR').setFormat('embed:assets/embed/notosans.ttf', 24, 0xFF000000, CENTER);
 
-		for (obj in [base, sustancia_id_text, sustancia_texto, mm_display, mm, mm_gmol, editarBoton, editarText])
+		for (obj in [base, sustancia_id_text, sustancia_texto, mm_display, mm, mm_gmol, base_editarBoton, editarLocos, editarText])
 			add(obj);
 
 		this.moves = false;
@@ -836,26 +1134,91 @@ class SustanciaMenu extends FlxSpriteGroup
 
 	public function changeEditButtonColor(?newColor:Int=0xFFB7B7B7)
 	{
-		if (this.editarBoton != null) {
-			FlxSpriteUtil.drawRoundRect(this.editarBoton, 0, 0, 100, 50, 15, 15, newColor, {
+		this.editarLocos.color = newColor;
+		/*if (this.base_editarBoton != null) {
+			this.editarLocos = FlxSpriteUtil.drawRoundRect(this.base_editarBoton, 0, 0, 100, 50, 15, 15, newColor, {
 				thickness: 3.5,
 				color: FlxColor.BLACK
 			});
-		}
+		}*/
 	}
 
-	/*override public function update(elapsed:Float)
+	/*
+	override public function update(elapsed:Float)
 	{
 		super.update(elapsed);
 		
-		if (editarBoton != null && FlxG.mouse.overlaps(editarBoton, (intCam != null ? intCam : null))) {
+		if (base_editarBoton != null && FlxG.mouse.overlaps(base_editarBoton, (intCam != null ? intCam : null))) {
 			changeEditButtonColor(0xFF9B9B9B);
 
 			if (FlxG.mouse.justPressed) {
 				changeEditButtonColor(0xFF686868);
 			}
-		} else if (editarBoton != null && !FlxG.mouse.overlaps(editarBoton, (intCam != null ? intCam : null))) {
+		} else if (base_editarBoton != null && !FlxG.mouse.overlaps(base_editarBoton, (intCam != null ? intCam : null))) {
 			changeEditButtonColor();
 		}
-	}	*/
+	}*/
+}
+
+/**
+ * Represents a single, interactive tile on the periodic table.
+ */
+class ElementTile extends FlxSpriteGroup
+{
+    public var symbol:String;
+    public var background:FlxSprite;
+    private var defaultColor:FlxColor;
+
+    public function new(x:Float = 0, y:Float = 0, width:Float, height:Float, elementSymbol:String)
+    {
+        super(x, y);
+
+		@:privateAccess {
+			this.symbol = Util.tabla_periodica.get(elementSymbol)[0];
+
+			switch (Util.tabla_periodica.get(elementSymbol)[4])
+			{
+				case 0: defaultColor = 0xFF6BA6FF; // No Metales
+				case 1: defaultColor = 0xFFFF93AE; // Gases Nobles
+				case 2: defaultColor = 0xFF6BE3FF; // Metales Alcalinos
+				case 3: defaultColor = 0xFFFFC054; // Metaloides
+				case 4: defaultColor = 0xFF9EFFEB; // Metales de Post-Transición
+				case 5: defaultColor = 0xFFAA99FF; // Metales de Transición
+				case 6: defaultColor = 0xFF00A1FF; // Lantánidos
+				case 7: defaultColor = 0xFFFF9C6B; // Actínidos
+				case 8: defaultColor = 0xFFB8BBC6; // Otros
+				case 9: defaultColor = 0xFFFF4F75; // Alcalinotérreos
+				default: defaultColor = 0xFFB8BBC6;
+			}
+		}
+
+        background = new FlxSprite().makeGraphic(Math.round(width), Math.round(height), defaultColor);
+        add(background);
+
+        var symbolText = new FlxText(0, 0, width, this.symbol);
+        symbolText.setFormat('embed:assets/embed/notosans.ttf', 11, FlxColor.BLACK, CENTER);
+        symbolText.y = (height - symbolText.height) / 2;
+        add(symbolText);
+    }
+
+	/*
+    override public function update(elapsed:Float)
+    {
+        super.update(elapsed);
+
+        // --- Hover and Interaction Logic ---
+        if (FlxG.mouse.overlaps(this))
+        {
+            this.scale.set(1.1, 1.1);
+            
+            if (FlxG.mouse.justPressed)
+            {
+                trace('Clicked on element: ${this.symbol}');
+            }
+        }
+        else
+        {
+            this.scale.set(1, 1);
+        }
+    }*/
 }
